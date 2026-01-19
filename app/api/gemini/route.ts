@@ -1,13 +1,8 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { NextResponse } from 'next/server';
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 export async function POST(req: Request) {
   try {
     const { messages, character, gameState } = await req.json();
-
-    const model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
 
     // TRPG 게임 마스터 프롬프트 구성
     const systemPrompt = `당신은 TRPG 게임 마스터입니다.
@@ -47,9 +42,34 @@ export async function POST(req: Request) {
 
     const prompt = `${systemPrompt}\n\n이전 대화:\n${conversationHistory}`;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
+    // Gemini API 직접 호출 (v1beta 사용)
+    const apiKey = process.env.GEMINI_API_KEY;
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                text: prompt,
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Gemini API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const text = data.candidates[0].content.parts[0].text;
 
     return NextResponse.json({ message: text });
   } catch (error) {
